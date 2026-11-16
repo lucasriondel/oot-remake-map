@@ -82,6 +82,13 @@ export const itemCountVisibleSlot: Slot<string[]> = {
   parse: parseStrings,
 }
 
+/** Whether the world map shows how many collectibles each place holds. */
+export const collectibleCountsSlot: Slot<boolean> = {
+  key: 'collectible-counts',
+  empty: false,
+  parse: (raw) => raw === true,
+}
+
 export const ageFilterSlot: Slot<AgeFilter> = {
   key: 'age-filter',
   empty: 'both',

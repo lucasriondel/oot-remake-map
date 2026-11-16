@@ -3,15 +3,63 @@ import { Check } from 'lucide-react'
 import { useMemo } from 'react'
 import { pinPosition } from '../lib/coords'
 import { dataset } from '../lib/data'
-import { itemCountVisibleSlot, officialDoneSlot, useStored } from '../lib/storage'
+import { collectibleCountsSlot, itemCountVisibleSlot, officialDoneSlot, useStored, write } from '../lib/storage'
 import type { Place } from '../lib/types'
+import { categoryStyle } from './categories'
 import { MapViewport } from './MapViewport'
 import { SupportLink } from './SupportLink'
 
 const totals = new Map<string, number>()
 for (const item of dataset.items) totals.set(item.place, (totals.get(item.place) ?? 0) + 1)
 
-function PlaceLink({ place, done, showCount }: { place: Place; done: number; showCount: boolean }) {
+/** Collectibles the world map can count per place, whether or not they are completed. */
+const COUNTED = ['gs', 'heart', 'container'] as const
+const collectibles = new Map<string, Map<string, number>>()
+for (const item of dataset.items) {
+  if (!(COUNTED as readonly string[]).includes(item.cat)) continue
+  const counts = collectibles.get(item.place) ?? new Map<string, number>()
+  counts.set(item.cat, (counts.get(item.cat) ?? 0) + 1)
+  collectibles.set(item.place, counts)
+}
+const categoryName = (key: string) => dataset.categories.find((category) => category.key === key)?.name ?? key
+
+function CollectibleCounts({ placeId }: { placeId: string }) {
+  const counts = collectibles.get(placeId)
+  if (!counts) return null
+  return (
+    <span className="mt-0.5 flex items-center gap-1.5 rounded border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[11px] leading-tight text-parchment-50 tabular-nums">
+      {COUNTED.map((key) => {
+        const count = counts.get(key)
+        if (!count) return null
+        const { icon: Icon, color } = categoryStyle(key)
+        return (
+          <span key={key} className="flex items-center gap-0.5" title={categoryName(key)}>
+            <Icon size={11} style={{ color }} aria-hidden />
+            {count}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+function collectibleLabel(placeId: string) {
+  const counts = collectibles.get(placeId)
+  if (!counts) return null
+  return COUNTED.filter((key) => counts.get(key)).map((key) => `${counts.get(key)} ${categoryName(key)}`).join(', ')
+}
+
+function PlaceLink({
+  place,
+  done,
+  showCount,
+  showCollectibles,
+}: {
+  place: Place
+  done: number
+  showCount: boolean
+  showCollectibles: boolean
+}) {
   const total = totals.get(place.id) ?? 0
   const complete = total > 0 && done === total
   const dungeon = place.kind === 'dungeon'
@@ -23,7 +71,9 @@ function PlaceLink({ place, done, showCount }: { place: Place; done: number; sho
         to="/$zone"
         params={{ zone: place.slug }}
         draggable={false}
-        aria-label={[place.name, dungeon ? 'dungeon' : 'zone', progress].filter(Boolean).join(', ')}
+        aria-label={[place.name, dungeon ? 'dungeon' : 'zone', progress, showCollectibles && collectibleLabel(place.id)]
+          .filter(Boolean)
+          .join(', ')}
         className="group absolute -top-6 left-0 flex w-max -translate-x-1/2 cursor-pointer flex-col items-center rounded-lg"
       >
         <span className="grid size-12 place-items-center">
@@ -45,6 +95,7 @@ function PlaceLink({ place, done, showCount }: { place: Place; done: number; sho
           {place.name}
           {showCount && total > 0 && done > 0 && <span className="tabular-nums opacity-70">{done}/{total}</span>}
         </span>
+        {showCollectibles && <CollectibleCounts placeId={place.id} />}
       </Link>
     </div>
   )
@@ -53,6 +104,7 @@ function PlaceLink({ place, done, showCount }: { place: Place; done: number; sho
 export function WorldMap() {
   const doneIds = useStored(officialDoneSlot)
   const countsShown = useStored(itemCountVisibleSlot)
+  const collectiblesShown = useStored(collectibleCountsSlot)
   const donePerPlace = useMemo(() => {
     const done = new Set(doneIds)
     const counts = new Map<string, number>()
@@ -83,6 +135,7 @@ export function WorldMap() {
             place={place}
             done={donePerPlace.get(place.id) ?? 0}
             showCount={countsShown.includes(place.id)}
+            showCollectibles={collectiblesShown}
           />
         ))}
       </MapViewport>
@@ -99,6 +152,20 @@ export function WorldMap() {
             <span className="size-2.5 rotate-45 bg-ember" /> Dungeon
           </li>
         </ul>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={collectiblesShown}
+          onClick={() => write(collectibleCountsSlot, !collectiblesShown)}
+          className="pointer-events-auto mt-2 flex cursor-pointer items-center gap-2 text-xs text-parchment-200"
+        >
+          Show collectible counts
+          <span className={`relative h-5 w-9 rounded-full transition-colors ${collectiblesShown ? 'bg-moss' : 'bg-ink-600'}`}>
+            <span
+              className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-parchment-50 transition-transform ${collectiblesShown ? 'translate-x-4' : ''}`}
+            />
+          </span>
+        </button>
       </header>
       <SupportLink className="absolute bottom-3 left-3" />
     </main>
