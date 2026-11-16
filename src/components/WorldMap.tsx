@@ -2,9 +2,16 @@ import { Link } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import { useMemo } from 'react'
 import { pinPosition } from '../lib/coords'
-import { dataset } from '../lib/data'
-import { collectibleCountsSlot, itemCountVisibleSlot, officialDoneSlot, useStored, write } from '../lib/storage'
-import type { Place } from '../lib/types'
+import { categoryName, dataset, matchesAge } from '../lib/data'
+import {
+  ageFilterSlot,
+  collectibleCountsSlot,
+  itemCountVisibleSlot,
+  officialDoneSlot,
+  useStored,
+  write,
+} from '../lib/storage'
+import type { AgeFilter, Place } from '../lib/types'
 import { categoryStyle } from './categories'
 import { MapViewport } from './MapViewport'
 import { SupportLink } from './SupportLink'
@@ -14,17 +21,32 @@ for (const item of dataset.items) totals.set(item.place, (totals.get(item.place)
 
 /** Collectibles the world map can count per place, whether or not they are completed. */
 const COUNTED = ['gs', 'heart', 'container'] as const
-const collectibles = new Map<string, Map<string, number>>()
-for (const item of dataset.items) {
-  if (!(COUNTED as readonly string[]).includes(item.cat)) continue
-  const counts = collectibles.get(item.place) ?? new Map<string, number>()
-  counts.set(item.cat, (counts.get(item.cat) ?? 0) + 1)
-  collectibles.set(item.place, counts)
-}
-const categoryName = (key: string) => dataset.categories.find((category) => category.key === key)?.name ?? key
+type Counts = Map<string, Map<string, number>>
 
-function CollectibleCounts({ placeId }: { placeId: string }) {
-  const counts = collectibles.get(placeId)
+function countCollectibles(age: AgeFilter): Counts {
+  const perPlace: Counts = new Map()
+  for (const item of dataset.items) {
+    if (!(COUNTED as readonly string[]).includes(item.cat) || !matchesAge(item, age)) continue
+    const counts = perPlace.get(item.place) ?? new Map<string, number>()
+    counts.set(item.cat, (counts.get(item.cat) ?? 0) + 1)
+    perPlace.set(item.place, counts)
+  }
+  return perPlace
+}
+
+const collectiblesByAge: Record<AgeFilter, Counts> = {
+  child: countCollectibles('child'),
+  adult: countCollectibles('adult'),
+  both: countCollectibles('both'),
+}
+
+const ageOptions: { value: AgeFilter; label: string }[] = [
+  { value: 'child', label: 'Child' },
+  { value: 'adult', label: 'Adult' },
+  { value: 'both', label: 'Both' },
+]
+
+function CollectibleCounts({ counts }: { counts: Map<string, number> | undefined }) {
   if (!counts) return null
   return (
     <span className="mt-0.5 flex items-center gap-1.5 rounded border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[11px] leading-tight text-parchment-50 tabular-nums">
@@ -43,8 +65,7 @@ function CollectibleCounts({ placeId }: { placeId: string }) {
   )
 }
 
-function collectibleLabel(placeId: string) {
-  const counts = collectibles.get(placeId)
+function collectibleLabel(counts: Map<string, number> | undefined) {
   if (!counts) return null
   return COUNTED.filter((key) => counts.get(key)).map((key) => `${counts.get(key)} ${categoryName(key)}`).join(', ')
 }
@@ -53,12 +74,13 @@ function PlaceLink({
   place,
   done,
   showCount,
-  showCollectibles,
+  collectibles,
 }: {
   place: Place
   done: number
   showCount: boolean
-  showCollectibles: boolean
+  /** Counts to show under the name, or null while counts are off. */
+  collectibles: Map<string, number> | undefined | null
 }) {
   const total = totals.get(place.id) ?? 0
   const complete = total > 0 && done === total
@@ -71,7 +93,7 @@ function PlaceLink({
         to="/$zone"
         params={{ zone: place.slug }}
         draggable={false}
-        aria-label={[place.name, dungeon ? 'dungeon' : 'zone', progress, showCollectibles && collectibleLabel(place.id)]
+        aria-label={[place.name, dungeon ? 'dungeon' : 'zone', progress, collectibles && collectibleLabel(collectibles)]
           .filter(Boolean)
           .join(', ')}
         className="group absolute -top-6 left-0 flex w-max -translate-x-1/2 cursor-pointer flex-col items-center rounded-lg"
@@ -95,7 +117,7 @@ function PlaceLink({
           {place.name}
           {showCount && total > 0 && done > 0 && <span className="tabular-nums opacity-70">{done}/{total}</span>}
         </span>
-        {showCollectibles && <CollectibleCounts placeId={place.id} />}
+        {collectibles && <CollectibleCounts counts={collectibles} />}
       </Link>
     </div>
   )
@@ -105,6 +127,8 @@ export function WorldMap() {
   const doneIds = useStored(officialDoneSlot)
   const countsShown = useStored(itemCountVisibleSlot)
   const collectiblesShown = useStored(collectibleCountsSlot)
+  const age = useStored(ageFilterSlot)
+  const collectibles = collectiblesShown ? collectiblesByAge[age] : null
   const donePerPlace = useMemo(() => {
     const done = new Set(doneIds)
     const counts = new Map<string, number>()
@@ -135,7 +159,7 @@ export function WorldMap() {
             place={place}
             done={donePerPlace.get(place.id) ?? 0}
             showCount={countsShown.includes(place.id)}
-            showCollectibles={collectiblesShown}
+            collectibles={collectibles && collectibles.get(place.id)}
           />
         ))}
       </MapViewport>
@@ -166,6 +190,27 @@ export function WorldMap() {
             />
           </span>
         </button>
+        {collectiblesShown && (
+          <div
+            role="group"
+            aria-label="Count collectibles for age"
+            className="pointer-events-auto mt-2 flex overflow-hidden rounded border border-ink-600"
+          >
+            {ageOptions.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={value === age}
+                onClick={() => write(ageFilterSlot, value)}
+                className={`flex-1 cursor-pointer px-2 py-1 text-xs ${
+                  value === age ? 'bg-parchment-200 font-medium text-ink-950' : 'text-parchment-200 hover:bg-ink-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
       <SupportLink className="absolute bottom-3 left-3" />
     </main>
