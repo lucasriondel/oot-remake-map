@@ -9,7 +9,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL)
-      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' })))),
+      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' }))))
+      // Take over from the previous version at once, so a deploy reaches open tabs on their next load.
+      .then(() => self.skipWaiting()),
   )
 })
 

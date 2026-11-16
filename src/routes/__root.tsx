@@ -24,7 +24,16 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   useEffect(() => {
-    if (import.meta.env.PROD && 'serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js')
+    if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
+    // A first install also fires controllerchange, but there is no stale page to replace then.
+    const hadController = Boolean(navigator.serviceWorker.controller)
+    let reloaded = false
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return
+      reloaded = true
+      window.location.reload()
+    })
+    void navigator.serviceWorker.register('/sw.js')
   }, [])
 
   return (
