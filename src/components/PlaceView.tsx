@@ -27,6 +27,7 @@ import { MergeNotice } from './MergeNotice'
 import { NewPinPopover } from './NewPinPopover'
 import { CustomPinList, OfficialList, OfficialToggle, RevealedList, Section } from './Panels'
 import { CustomMarker, DraftMarker, MergeTrail, OfficialMarker } from './Pins'
+import { SupportLink } from './SupportLink'
 
 type Selection = { kind: 'custom' | 'item'; id: string } | null
 
@@ -74,6 +75,9 @@ function Sidebar({ place, progress, total, children }: { place: Place; progress:
         </details>
       </header>
       {children}
+      <footer className="mt-auto border-t border-ink-700 px-4 py-3">
+        <SupportLink />
+      </footer>
     </aside>
   )
 }

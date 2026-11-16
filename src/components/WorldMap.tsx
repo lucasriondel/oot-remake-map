@@ -6,6 +6,7 @@ import { dataset } from '../lib/data'
 import { itemCountVisibleSlot, officialDoneSlot, useStored } from '../lib/storage'
 import type { Place } from '../lib/types'
 import { MapViewport } from './MapViewport'
+import { SupportLink } from './SupportLink'
 
 const totals = new Map<string, number>()
 for (const item of dataset.items) totals.set(item.place, (totals.get(item.place) ?? 0) + 1)
@@ -99,6 +100,7 @@ export function WorldMap() {
           </li>
         </ul>
       </header>
+      <SupportLink className="absolute bottom-3 left-3" />
     </main>
   )
 }
